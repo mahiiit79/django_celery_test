@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7.0.11-alpine
+
+
+  django:
+    image : eshop_django
+    container_name: django_celery_project
+    build:
+      context: ./eshop
+      dockerfile: Dockerfile
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    volumes:
+      - ./eshop:/app/
+    ports:
+      - "8000:8000"
+    environment:
+      - ALLOWED_HOSTS=localhost,127.0.0.1
+      - DEBUG=True
+      - SECRET_KEY=sdlkfhsdlfhslhdslkdjfsldejfdsl@sldfhglsdfhg
+
+    depends_on:
+      - redis
+      - rabbitmq
+
+
+
+  rabbitmq:
+    image: rabbitmq:management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+
+
+  celery:
+    container_name: celery
+    build:
+      context: ./eshop
+      dockerfile: Dockerfile
+    #command: celery --app=celery_project worker -l INFO -Q celery,celery:1,celery:2,celery:3
+    command: celery --app=celery_project worker -l INFO -Q tasks,dead_letter -E -B
+    volumes:
+      - ./eshop:/app/
+    environment:
+      - ALLOWED_HOSTS=localhost,127.0.0.1
+      - DEBUG=True
+      - SECRET_KEY=sdlkfhsdlfhslhdslkdjfsldejfdsl@sldfhglsdfhg
+
+    depends_on:
+      - redis
+      - django
+      - rabbitmq
+
+
+  flower:
+    image: mher/flower
+    ports:
+      - "5555:5555"
+    environment:
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672/
+#
+#  stand_alone_celery:
+#    container_name: stand_alone_celery
+#    build:
+#      context: ./celery_worker
+#      dockerfile: Dockerfile
+#    command: celery -A celery_base worker -l INFO -Q queue2
+#    volumes:
+#      - ./celery_worker:/app
+#    environment:
+#      - BROKER_URL=redis://redis:6379/0
+#      - RESULT_BACKEND=redis://redis:6379/0
+#
+#    depends_on:
+#      - redis
+#      - django
